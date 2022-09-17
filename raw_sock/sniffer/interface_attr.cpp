@@ -1,108 +1,203 @@
 #include "interface_attr.h"
 
 #include <stdexcept>
-#include <array>
+#include <map>
+#include <string_view>
 
 #include <sys/ioctl.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
 #include <linux/if.h>
 #include <unistd.h>
 #include <cstring> // for strerror
 #include <cassert>
 #include <cerrno> // for errno
 
-namespace interface_attr {
+namespace {
 
-InterfaceAttr GetInterfaceAttr(const std::string &name) {
-    typedef unsigned int AttrValue;
-    typedef std::string ErrorMsg;
-    static std::array<std::pair<AttrValue, ErrorMsg>, 4> attrs = {
-            std::make_pair(SIOCGIFINDEX, std::string("Can`t get index of interface: " + name)),
-            std::make_pair(SIOCGIFHWADDR, std::string("Can`t get MAC address of interface: " + name)),
-            std::make_pair(SIOCGIFADDR, std::string("Can`t get Ip address of interface: " + name)),
-            std::make_pair(SIOCGIFMTU, std::string("Can`t get MTU of interface: " + name))
-    };
+typedef unsigned int AttrFlag;
 
+struct Arg {
+    int sock;
+    AttrFlag flag;
+    const std::string_view interfaceName;
+};
+
+typedef void (*GetterInterfaceAttr)(const Arg &arg);
+
+struct ifreq GetIfReq(const std::string_view name) {
     struct ifreq ifReg;
     memset(&ifReg, 0, sizeof(struct ifreq));
     assert(name.size() < IFNAMSIZ);
-    strncpy(ifReg.ifr_ifrn.ifrn_name, name.data(), IFNAMSIZ - 1);
+    strncpy(ifReg.ifr_ifrn.ifrn_name, name.data(), IFNAMSIZ);
+    return ifReg;
+}
 
+struct ifreq GetIfReg(const Arg &arg, const std::string_view errorMsg) {
+    struct ifreq ifReg = GetIfReq(arg.interfaceName);
+    if (ioctl(arg.sock, arg.flag, &ifReg) < 0) {
+        throw std::runtime_error(std::string(errorMsg) + std::string(arg.interfaceName));
+    }
+    return ifReg;
+}
 
-    const int sock = socket(AF_INET,SOCK_DGRAM,0);
+} // namespace
+
+namespace interface_attr {
+
+InterfaceAttr GetInterfaceAttr(const std::string &name) {
+    const int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
-        throw std::runtime_error("Can`t get socket");
+        throw std::runtime_error("Can`t create socket");
     }
 
-    std::for_each_n(attrs.cbegin(), attrs.size(), [&sock, &ifReg](const auto &attrItem){
-        const auto attrValue = attrItem.first;
-        const auto errorMsg = attrItem.second;
-        if ((ioctl(sock, attrValue, ifReg)) < 0) {
-            close(sock);
-            throw std::runtime_error(strerror(errno) + std::string(":\t") + errorMsg);
-        }
-    });
+    static InterfaceAttr::Data data;
+    data.name_ = name;
+    data.index_ = 0;
+    data.sock_ = sock;
+    memset(&data.macAddress_, 0, sizeof(InterfaceAttr::Address));
+    memset(&data.ipAddress_, 0, sizeof(InterfaceAttr::Address));
 
-    return InterfaceAttr(sock, ifReg);
+    const auto getterIndex = [](const Arg &arg) {
+        data.index_ = GetIfReg(arg, "Can`t get index for interface with name: ")
+                .ifr_ifru.ifru_ivalue;
+    };
+    const auto getterMacAddress = [](const Arg &arg){
+        data.macAddress_ = GetIfReg(arg, "Can`t get MAC address for interface with name: ")
+                .ifr_ifru.ifru_hwaddr;
+    };
+    const auto getterIpAddress = [](const Arg &arg){
+        data.ipAddress_ = GetIfReg(arg, "Can`t get IP address for interface with name: ")
+                .ifr_ifru.ifru_addr;
+    };
+    const auto getterMTU = [](const Arg &arg) {
+        data.mtu_ = GetIfReg(arg, "Can`t get MTU value for interface with name: ")
+                .ifr_ifru.ifru_mtu;
+    };
+
+    static const std::map<AttrFlag, GetterInterfaceAttr> attrs = {
+        std::make_pair(SIOCGIFINDEX, getterIndex),
+        std::make_pair(SIOCGIFHWADDR, getterMacAddress),
+        std::make_pair(SIOCGIFADDR, getterIpAddress),
+        std::make_pair(SIOCGIFMTU, getterMTU)
+    };
+
+    for (auto it = attrs.cbegin(); it != attrs.cend(); ++it) {
+        const auto flagValue = it->first;
+        const auto getter = it->second;
+        const Arg arg = {.sock = sock, .flag = flagValue, .interfaceName = name};
+        getter(arg);
+    }
+    return InterfaceAttr(std::move(data));
 }
 
 std::ostream &operator<<(std::ostream &os, const InterfaceAttr &attr) {
     return attr.operator<<(os);
 }
 
-InterfaceAttr::InterfaceAttr():
-sock_(-1),
-ifReq_() {
+InterfaceAttr::InterfaceAttr(InterfaceAttr::Data &&data):
+data_(std::move(data)) {
 }
 
-InterfaceAttr::InterfaceAttr(const int sock, const struct ifreq &ifReg):
-sock_(sock),
-ifReq_(ifReg) {
+InterfaceAttr::InterfaceAttr():
+data_() {
 }
 
 InterfaceAttr::~InterfaceAttr() {
-    if (sock_ > 0) {
-        close(sock_);
+    if (data_.sock_ > 0) {
+        close(data_.sock_);
     }
+}
+
+const std::string_view InterfaceAttr::getName() const {
+    return data_.name_;
 }
 
 const InterfaceAttr::Address &InterfaceAttr::getMacAddress() const {
-    return ifReq_.ifr_ifru.ifru_hwaddr;
+    return data_.macAddress_;
 }
 
 const InterfaceAttr::Address &InterfaceAttr::getIpAddress() const {
-    return ifReq_.ifr_ifru.ifru_addr;
+    return data_.ipAddress_;
 }
 
 InterfaceAttr::Index InterfaceAttr::getIndex() const {
-    return ifReq_.ifr_ifru.ifru_ivalue;
+    return data_.index_;
+}
+
+int InterfaceAttr::getMtu() const {
+    return data_.mtu_;
 }
 
 bool InterfaceAttr::enablePromiscuousMode() {
-    if(ioctl(sock_, SIOCGIFFLAGS, &ifReq_) < 0) {
+    struct ifreq ifReq = GetIfReq(data_.name_);
+    if(ioctl(data_.sock_, SIOCGIFFLAGS, &ifReq) < 0) {
         return false;
     }
-    ifReq_.ifr_flags |= IFF_PROMISC;
-    if (ioctl(sock_, SIOCSIFFLAGS, &ifReq_) < 0) {
+    ifReq.ifr_flags |= IFF_PROMISC;
+    if (ioctl(data_.sock_, SIOCSIFFLAGS, &ifReq) < 0) {
         return false;
     }
     return true;
 }
 
 bool InterfaceAttr::disablePromiscuousMode() {
-    if(ioctl(sock_, SIOCGIFFLAGS, &ifReq_) < 0) {
+    struct ifreq ifReq = GetIfReq(data_.name_);
+    if(ioctl(data_.sock_, SIOCGIFFLAGS, &ifReq) < 0) {
         return false;
     }
-    ifReq_.ifr_flags &= ~(IFF_PROMISC);
-    if (ioctl(sock_, SIOCSIFFLAGS, &ifReq_) < 0) {
+    ifReq.ifr_flags &= ~(IFF_PROMISC);
+    if (ioctl(data_.sock_, SIOCSIFFLAGS, &ifReq) < 0) {
         return false;
     }
     return true;
 }
 
 std::ostream &InterfaceAttr::operator<<(std::ostream &os) const {
-    return os << "index: " << getIndex()
-        << "MAC address: " << getMacAddress().sa_data
-        << "Ip address: " << getIpAddress().sa_data;
+    os << "name: " << getName() << "\t";
+    os << "index: [" << getIndex() << "]\t";
+    os << "MAC address: [";
+    {
+        const struct sockaddr_in *const inAddress = (struct sockaddr_in*)(&getMacAddress());
+        const auto address = inet_ntoa(inAddress->sin_addr);
+        os << address;
+    }
+    os << "]\t";
+    os << "IP address: [";
+    {
+        const struct sockaddr_in *const inAddress = (struct sockaddr_in*)(&getIpAddress());
+        const auto address = inet_ntoa(inAddress->sin_addr);
+        os << address;
+    }
+    os << "]\t";
+    os << "MTU: " << getMtu();
+    return os;
+}
+
+InterfaceAttr::Data::Data(InterfaceAttr::Data &&other) noexcept:
+name_(),
+macAddress_(),
+ipAddress_(),
+index_(),
+mtu_(),
+sock_(){
+    this->operator=(std::move(other));
+}
+
+InterfaceAttr::Data &InterfaceAttr::Data::operator=(InterfaceAttr::Data &&other) noexcept {
+    name_ = std::move(other.name_);
+    macAddress_ = other.macAddress_;
+    ipAddress_ = other.ipAddress_;
+    index_ = other.index_;
+    mtu_ = other.mtu_;
+    sock_ = other.index_;
+
+    memset(&other.macAddress_, 0, sizeof(Address));
+    memset(&other.ipAddress_, 0, sizeof(Address));
+    other.index_ = 0;
+    other.mtu_ = 0;
+    other.sock_ = -1;
+    return *this;
 }
 
 } // namespace interface_attr

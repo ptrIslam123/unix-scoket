@@ -5,7 +5,7 @@
 
 namespace parser {
 
-bool ParserNetPackage(__u8 *buff, size_t buffSize);
+bool ParserNetPackage(const __u8 *buff, unsigned int buffSize);
 
 } // namespace parser
 

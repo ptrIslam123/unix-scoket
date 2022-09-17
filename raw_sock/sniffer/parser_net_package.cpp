@@ -28,7 +28,7 @@ bool ExtractTcpHeader(__u8 *buff) {
 
 namespace parser {
 
-bool ParserNetPackage(__u8 *buff, size_t buffSize) {
+bool ParserNetPackage(const __u8 *const buff, const unsigned int buffSize) {
 
 }
 
