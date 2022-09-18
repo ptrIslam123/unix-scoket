@@ -10,7 +10,7 @@
 
 namespace interface_attr {
 
-class InterfaceAttr {
+class InterfaceInfo {
 public:
     typedef struct sockaddr Address;
     typedef int Index;
@@ -30,13 +30,13 @@ public:
         int sock_;
     };
 
-    InterfaceAttr();
-    explicit InterfaceAttr(Data &&data);
-    ~InterfaceAttr();
-    InterfaceAttr(InterfaceAttr &&other) = default;
-    InterfaceAttr &operator=(InterfaceAttr &&other) = default;
-    InterfaceAttr(const InterfaceAttr &other) = delete;
-    InterfaceAttr &operator=(const InterfaceAttr &other) = delete;
+    InterfaceInfo();
+    explicit InterfaceInfo(Data &&data);
+    ~InterfaceInfo();
+    InterfaceInfo(InterfaceInfo &&other) = default;
+    InterfaceInfo &operator=(InterfaceInfo &&other) = default;
+    InterfaceInfo(const InterfaceInfo &other) = delete;
+    InterfaceInfo &operator=(const InterfaceInfo &other) = delete;
 
     const std::string_view getName() const;
     const Address &getMacAddress() const;
@@ -52,8 +52,8 @@ private:
     Data data_;
 };
 
-InterfaceAttr GetInterfaceAttr(const std::string &name);
-std::ostream &operator<<(std::ostream &os, const InterfaceAttr &attr);
+InterfaceInfo GetInterfaceAttr(const std::string &name);
+std::ostream &operator<<(std::ostream &os, const InterfaceInfo &attr);
 
 } // namespace interface_attr
 

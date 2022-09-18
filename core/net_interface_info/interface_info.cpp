@@ -1,4 +1,4 @@
-#include "interface_attr.h"
+#include "interface_info.h"
 
 #include <stdexcept>
 #include <map>
@@ -45,18 +45,18 @@ struct ifreq GetIfReg(const Arg &arg, const std::string_view errorMsg) {
 
 namespace interface_attr {
 
-InterfaceAttr GetInterfaceAttr(const std::string &name) {
+InterfaceInfo GetInterfaceAttr(const std::string &name) {
     const int sock = socket(AF_INET, SOCK_DGRAM, 0);
     if (sock < 0) {
         throw std::runtime_error("Can`t create socket");
     }
 
-    static InterfaceAttr::Data data;
+    static InterfaceInfo::Data data;
     data.name_ = name;
     data.index_ = 0;
     data.sock_ = sock;
-    memset(&data.macAddress_, 0, sizeof(InterfaceAttr::Address));
-    memset(&data.ipAddress_, 0, sizeof(InterfaceAttr::Address));
+    memset(&data.macAddress_, 0, sizeof(InterfaceInfo::Address));
+    memset(&data.ipAddress_, 0, sizeof(InterfaceInfo::Address));
 
     const auto getterIndex = [](const Arg &arg) {
         data.index_ = GetIfReg(arg, "Can`t get index for interface with name: ")
@@ -88,48 +88,48 @@ InterfaceAttr GetInterfaceAttr(const std::string &name) {
         const Arg arg = {.sock = sock, .flag = flagValue, .interfaceName = name};
         getter(arg);
     }
-    return InterfaceAttr(std::move(data));
+    return InterfaceInfo(std::move(data));
 }
 
-std::ostream &operator<<(std::ostream &os, const InterfaceAttr &attr) {
+std::ostream &operator<<(std::ostream &os, const InterfaceInfo &attr) {
     return attr.operator<<(os);
 }
 
-InterfaceAttr::InterfaceAttr(InterfaceAttr::Data &&data):
+InterfaceInfo::InterfaceInfo(InterfaceInfo::Data &&data):
 data_(std::move(data)) {
 }
 
-InterfaceAttr::InterfaceAttr():
+InterfaceInfo::InterfaceInfo():
 data_() {
 }
 
-InterfaceAttr::~InterfaceAttr() {
+InterfaceInfo::~InterfaceInfo() {
     if (data_.sock_ > 0) {
         close(data_.sock_);
     }
 }
 
-const std::string_view InterfaceAttr::getName() const {
+const std::string_view InterfaceInfo::getName() const {
     return data_.name_;
 }
 
-const InterfaceAttr::Address &InterfaceAttr::getMacAddress() const {
+const InterfaceInfo::Address &InterfaceInfo::getMacAddress() const {
     return data_.macAddress_;
 }
 
-const InterfaceAttr::Address &InterfaceAttr::getIpAddress() const {
+const InterfaceInfo::Address &InterfaceInfo::getIpAddress() const {
     return data_.ipAddress_;
 }
 
-InterfaceAttr::Index InterfaceAttr::getIndex() const {
+InterfaceInfo::Index InterfaceInfo::getIndex() const {
     return data_.index_;
 }
 
-int InterfaceAttr::getMtu() const {
+int InterfaceInfo::getMtu() const {
     return data_.mtu_;
 }
 
-bool InterfaceAttr::enablePromiscuousMode() {
+bool InterfaceInfo::enablePromiscuousMode() {
     struct ifreq ifReq = GetIfReq(data_.name_);
     if(ioctl(data_.sock_, SIOCGIFFLAGS, &ifReq) < 0) {
         return false;
@@ -141,7 +141,7 @@ bool InterfaceAttr::enablePromiscuousMode() {
     return true;
 }
 
-bool InterfaceAttr::disablePromiscuousMode() {
+bool InterfaceInfo::disablePromiscuousMode() {
     struct ifreq ifReq = GetIfReq(data_.name_);
     if(ioctl(data_.sock_, SIOCGIFFLAGS, &ifReq) < 0) {
         return false;
@@ -153,7 +153,7 @@ bool InterfaceAttr::disablePromiscuousMode() {
     return true;
 }
 
-std::ostream &InterfaceAttr::operator<<(std::ostream &os) const {
+std::ostream &InterfaceInfo::operator<<(std::ostream &os) const {
     os << "name: " << getName() << "\t";
     os << "index: [" << getIndex() << "]\t";
     os << "MAC address: [";
@@ -174,7 +174,7 @@ std::ostream &InterfaceAttr::operator<<(std::ostream &os) const {
     return os;
 }
 
-InterfaceAttr::Data::Data(InterfaceAttr::Data &&other) noexcept:
+InterfaceInfo::Data::Data(InterfaceInfo::Data &&other) noexcept:
 name_(),
 macAddress_(),
 ipAddress_(),
@@ -184,7 +184,7 @@ sock_(){
     this->operator=(std::move(other));
 }
 
-InterfaceAttr::Data &InterfaceAttr::Data::operator=(InterfaceAttr::Data &&other) noexcept {
+InterfaceInfo::Data &InterfaceInfo::Data::operator=(InterfaceInfo::Data &&other) noexcept {
     name_ = std::move(other.name_);
     macAddress_ = other.macAddress_;
     ipAddress_ = other.ipAddress_;

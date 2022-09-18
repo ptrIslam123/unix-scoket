@@ -6,14 +6,11 @@
 
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <arpa/inet.h>
-#include <sys/ioctl.h>
-#include <linux/if.h>
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
 #include <unistd.h>
 
-#include "interface_attr.h"
+#include "interface_info.h"
 #include "parser_net_package.h"
 
 int main(int argc, char **argv) {
@@ -42,7 +39,7 @@ int main(int argc, char **argv) {
      * IP адрес, маска подсети, размер MTU, индекс и Mac адрес.
      */
 
-    auto interfaceAttr = interface_attr::InterfaceAttr();
+    auto interfaceAttr = interface_attr::InterfaceInfo();
      try {
          interfaceAttr = interface_attr::GetInterfaceAttr(interfaceName);
      } catch (const std::runtime_error &e) {
@@ -76,7 +73,7 @@ int main(int argc, char **argv) {
 
     typedef std::array<__u8, ETH_FRAME_LEN> Buffer;
     Buffer buffer;
-    while (true) {
+    for (auto i = 0; i < 2; ++i) {
         memset(buffer.data(), 0, buffer.size());
 
         const auto receiveBuffSize = recvfrom(sock, buffer.data(), buffer.size(), 0, NULL, NULL);
@@ -84,7 +81,15 @@ int main(int argc, char **argv) {
             std::cerr << "sys call recvfrom is failed" << std::endl;
         }
 
-        parser::ParserNetPackage(buffer.data(), receiveBuffSize);
+        std::cout << "Receive raw package with size: " << receiveBuffSize << std::endl;
+
+        const auto ethernetHeader = parser::ExtractEthernetHeader(buffer.data());
+        parser::WriteEthernetHeaderTo(std::cout, ethernetHeader);
+
+        const auto ipHeader = parser::ExtractIpHeader(buffer.data());
+        parser::WriteIpHeaderTo(std::cout, ipHeader);
+
+        std::cout << std::endl;
     }
 
     return 0;

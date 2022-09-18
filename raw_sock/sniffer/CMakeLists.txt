@@ -3,8 +3,11 @@ project(sniffer)
 
 set(CMAKE_CXX_STANDARD 20)
 
-add_executable(raw_sock
+add_executable(${PROJECT_NAME}
     main.cpp
-    interface_attr.cpp
-    parser_net_package.cpp
+)
+
+target_link_libraries(${PROJECT_NAME} PUBLIC
+    net_interface_info
+    parser
 )
