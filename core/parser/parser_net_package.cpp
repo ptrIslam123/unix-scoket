@@ -7,6 +7,11 @@
 
 namespace parser {
 
+__u8 *ExtractData(const __u8 *buff, uint size) {
+    return NULL;
+}
+
+
 EthernetHeader ExtractEthernetHeader(const __u8 *const buff) {
     const EthernetHeader *const ethernetHeader = (EthernetHeader*)(buff);
     struct ethhdr result;
@@ -41,7 +46,7 @@ IpHeader ExtractIpHeader(const __u8 *const buff) {
     result.ttl = ipHeader->ttl;
     /// Copy type of protocol
     result.protocol = ipHeader->protocol;
-    /// Check sum of package
+    /// Checksum of package
     result.check = ipHeader->check;
     /// Copy source address (for Ip level it is IP address)
     result.saddr = ipHeader->saddr;
@@ -50,12 +55,40 @@ IpHeader ExtractIpHeader(const __u8 *const buff) {
     return result;
 }
 
-UdpHeader ExtractUdpHeader(const __u8 *const buff, const int size) {
-
+UdpHeader ExtractUdpHeader(const __u8 *const buff) {
+    /// Лучше инспоьзовать константу ETH_HLEN для определения размера заголовка Ethernet
+    /// Так как sizeof может дать не верный результат из-за особеностей выравнивания структур
+    constexpr auto ethernetHeaderLen = ETH_HLEN;
+    constexpr auto wordSize = 4;
+    const auto ipHeaderLen = (unsigned int)(ExtractIpHeader(buff).ihl) * wordSize;
+    const UdpHeader *const udpHeader = (UdpHeader*)(buff + ethernetHeaderLen + ipHeaderLen);
+    UdpHeader result;
+    /// Copy source address (for UDP level it is port number)
+    result.source = udpHeader->source;
+    /// Copy destination address (for UDP lever it is port number)
+    result.dest = udpHeader->dest;
+    /// Copy UDP package length
+    result.len = udpHeader->len;
+    /// Copy UDP checksum
+    result.check = udpHeader->check;
+    return result;
 }
 
+TcpHeader ExtractTcpHeader(const __u8 *buff) {
+    /// Лучше инспоьзовать константу ETH_HLEN для определения размера заголовка Ethernet
+    /// Так как sizeof может дать не верный результат из-за особеностей выравнивания структур
+    constexpr auto ethernetHeaderLen = ETH_HLEN;
+    constexpr auto wordSize = 4;
+    const auto ipHeaderLen = (unsigned int)(ExtractIpHeader(buff).ihl) * wordSize;
+    const TcpHeader *const tcpHeader = (TcpHeader*)(buff + ethernetHeaderLen + ipHeaderLen);
+    TcpHeader result;
+    memcpy(&result, tcpHeader, sizeof(TcpHeader));
+    return result;
+}
+
+
 void WriteEthernetHeaderTo(std::ostream &ostream, const EthernetHeader &ethernetHeader) {
-    ostream << "\t\tEthernet Header" << "\n";
+    ostream << "************************ Ethernet HEADER ************************" << "\n";
 
     ostream << "protocol: " << ethernetHeader.h_proto << "\n";
 
@@ -81,7 +114,7 @@ void WriteEthernetHeaderTo(std::ostream &ostream, const EthernetHeader &ethernet
 }
 
 void WriteIpHeaderTo(std::ostream &ostream, const IpHeader &ipHeader) {
-    ostream << "\t\tIP Header\n";
+    ostream << "************************ IP HEADER ************************\n";
     ostream << "Ip version: " << (unsigned int)ipHeader.version << "\n";
     ostream << "Internet(IP) header bytes length: " << (unsigned int)(ipHeader.ihl) * 4 << "\n";
     ostream << "Type of service: " << (unsigned int)ipHeader.tos << "\n";
@@ -89,7 +122,7 @@ void WriteIpHeaderTo(std::ostream &ostream, const IpHeader &ipHeader) {
     ostream << "Identification number: " << ntohs(ipHeader.id) << "\n";
     ostream << "TTL(Time to live): " << (unsigned int)ipHeader.ttl << "\n";
     ostream << "Type of protocol: " << (unsigned int)ipHeader.protocol << "\n";
-    ostream << "Check sum: " << ntohs(ipHeader.check) << "\n";
+    ostream << "Checksum: " << ntohs(ipHeader.check) << "\n";
     {
         struct sockaddr_in *inAddress = (struct sockaddr_in*)(&ipHeader.saddr);
         ostream << "Source IP address: " << inet_ntoa(inAddress->sin_addr) << "\n";
@@ -99,5 +132,23 @@ void WriteIpHeaderTo(std::ostream &ostream, const IpHeader &ipHeader) {
         ostream << "Destination IP address: " << inet_ntoa(inAddress->sin_addr) << "\n";
     }
 }
+
+void WriteUdpHeaderTo(std::ostream &ostream, const UdpHeader &udpHeader) {
+    ostream << "************************ UDP HEADER ************************" << "\n";
+    ostream << "Destination port: " << udpHeader.dest << "\n";
+    ostream << "Source port: " << udpHeader.source << "\n";
+    ostream << "Length: " << ntohs(udpHeader.len) << "\n";
+    ostream << "Checksum: " << ntohs(udpHeader.check) << "\n";
+}
+
+void WriteTcpHeaderTo(std::ostream &ostream, const TcpHeader &tcpHeader) {
+    ostream << "************************ TCP HEADER ************************" << "\n";
+    ostream << "Destination port: " << ntohs(tcpHeader.dest) << "\n";
+    ostream << "Source port: " << ntohs(tcpHeader.source) << "\n";
+    ostream << "Window size: " << ntohs(tcpHeader.window) << "\n";
+    ostream << "Sequence number(id): " << ntohs(tcpHeader.seq) << "\n";
+    ostream << "Data offset(data order): " << ntohs(tcpHeader.th_off) << "\n";
+}
+
 
 } // namespace parser

@@ -9,6 +9,7 @@
 #include <linux/if_ether.h>
 #include <linux/if_packet.h>
 #include <unistd.h>
+#include <arpa/inet.h>
 
 #include "interface_info.h"
 #include "parser_net_package.h"
@@ -58,7 +59,8 @@ int main(int argc, char **argv) {
     sockAddress.sll_family = PF_PACKET;
     sockAddress.sll_protocol = htons(ETH_P_ALL);
     sockAddress.sll_ifindex = interfaceAttr.getIndex();
-
+    memcpy(sockAddress.sll_addr, interfaceAttr.getMacAddress().sa_data,
+           sizeof(sockAddress.sll_addr));
     /**
      * Привязываем сокет к сетевому интерфейсу. В принципе, делать это не
      * обязательно, если на хосте активен только один сетевой интерфейс.
@@ -73,7 +75,7 @@ int main(int argc, char **argv) {
 
     typedef std::array<__u8, ETH_FRAME_LEN> Buffer;
     Buffer buffer;
-    for (auto i = 0; i < 2; ++i) {
+    while (true) {
         memset(buffer.data(), 0, buffer.size());
 
         const auto receiveBuffSize = recvfrom(sock, buffer.data(), buffer.size(), 0, NULL, NULL);
@@ -89,6 +91,15 @@ int main(int argc, char **argv) {
         const auto ipHeader = parser::ExtractIpHeader(buffer.data());
         parser::WriteIpHeaderTo(std::cout, ipHeader);
 
+        const auto protocol = (unsigned int)ipHeader.protocol;
+        if (protocol == parser::UDP_PROTOCOL) {
+            const auto udpHeader = parser::ExtractUdpHeader(buffer.data());
+            parser::WriteUdpHeaderTo(std::cout, udpHeader);
+        }
+        if (protocol == parser::TCP_PROTOCOL) {
+            const auto tcpHeader = parser::ExtractTcpHeader(buffer.data());
+            parser::WriteTcpHeaderTo(std::cout, tcpHeader);
+        }
         std::cout << std::endl;
     }
 
