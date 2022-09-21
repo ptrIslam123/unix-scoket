@@ -12,13 +12,12 @@
 
 namespace parser {
 
-constexpr auto TCP_PROTOCOL = 6;
-constexpr auto UDP_PROTOCOL = 17;
-
 typedef struct ethhdr EthernetHeader;
 typedef struct iphdr IpHeader;
 typedef struct udphdr UdpHeader;
 typedef struct tcphdr TcpHeader;
+
+void ParsePackage(std::ostream &ostream, const __u8 *buff, uint buffSize);
 
 EthernetHeader ExtractEthernetHeader(const __u8 *buff);
 
@@ -28,7 +27,7 @@ UdpHeader ExtractUdpHeader(const __u8 *buff);
 
 TcpHeader ExtractTcpHeader(const __u8 *buff);
 
-__u8 *ExtractData(const __u8 *buff, uint size);
+std::pair<__u8*, uint> ExtractData(const __u8 *buff, uint size);
 
 void WriteEthernetHeaderTo(std::ostream &ostream, const EthernetHeader &ethernetHeader);
 

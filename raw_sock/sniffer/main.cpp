@@ -2,7 +2,6 @@
 #include <string>
 #include <array>
 #include <cstring>
-#include <cassert>
 
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -10,9 +9,23 @@
 #include <linux/if_packet.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <csignal>
 
 #include "interface_info.h"
 #include "parser_net_package.h"
+
+//#define __ENABLE_PROMISCUOUS_MODE__
+
+auto interfaceAttr = interface_attr::InterfaceInfo();
+
+void SigTermHandler(int sig) {
+#ifdef __ENABLE_PROMISCUOUS_MODE__
+    std::cout << "Disable promiscuous mode for interface with name: " << interfaceAttr.getName()
+            << std::endl;
+    interfaceAttr.disablePromiscuousMode();
+#endif
+    exit(0);
+}
 
 int main(int argc, char **argv) {
     if (argc != 2) {
@@ -23,31 +36,33 @@ int main(int argc, char **argv) {
     /**
     * Определим новый обработчик сигнала SIGINT - функцию mode_off
     */
-    // TODO
+    (void)signal(SIGTERM, SigTermHandler);
 
     /**
      * Создаем пакетный тип сокетов для работы с пакетами на уровне l2(ethernet).
      */
-    int sock = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    const auto sock = socket(PF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
     if (sock < 0) {
         std::cerr << "Can`t create raw socket" << std::endl;
         return EXIT_FAILURE;
     }
-
     const auto interfaceName = std::string(argv[1]);
+
     /**
      * после нужно определить параметры сетевого интерфейса:
      * IP адрес, маска подсети, размер MTU, индекс и Mac адрес.
      */
-
-    auto interfaceAttr = interface_attr::InterfaceInfo();
      try {
          interfaceAttr = interface_attr::GetInterfaceAttr(interfaceName);
      } catch (const std::runtime_error &e) {
          close(sock);
          throw;
      }
-     std::cout << interfaceAttr << std::endl;
+#ifdef __ENABLE_PROMISCUOUS_MODE__
+    std::cout << "Enable promiscuous mode for interface with name: " << interfaceName << std::endl;
+    interfaceAttr.enablePromiscuousMode();
+#endif
+    std::cout << interfaceAttr << std::endl;
 
     /**
      * При работе с пакетными сокетами для хранения адресной информации
@@ -84,22 +99,7 @@ int main(int argc, char **argv) {
         }
 
         std::cout << "Receive raw package with size: " << receiveBuffSize << std::endl;
-
-        const auto ethernetHeader = parser::ExtractEthernetHeader(buffer.data());
-        parser::WriteEthernetHeaderTo(std::cout, ethernetHeader);
-
-        const auto ipHeader = parser::ExtractIpHeader(buffer.data());
-        parser::WriteIpHeaderTo(std::cout, ipHeader);
-
-        const auto protocol = (unsigned int)ipHeader.protocol;
-        if (protocol == parser::UDP_PROTOCOL) {
-            const auto udpHeader = parser::ExtractUdpHeader(buffer.data());
-            parser::WriteUdpHeaderTo(std::cout, udpHeader);
-        }
-        if (protocol == parser::TCP_PROTOCOL) {
-            const auto tcpHeader = parser::ExtractTcpHeader(buffer.data());
-            parser::WriteTcpHeaderTo(std::cout, tcpHeader);
-        }
+        parser::ParsePackage(std::cout, buffer.data(), receiveBuffSize);
         std::cout << std::endl;
     }
 
