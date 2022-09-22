@@ -1,4 +1,5 @@
 #include <iostream>
+#include <fstream>
 #include <string>
 #include <array>
 #include <cstring>
@@ -14,7 +15,7 @@
 #include "interface_info.h"
 #include "parser_net_package.h"
 
-//#define __ENABLE_PROMISCUOUS_MODE__
+#define __ENABLE_PROMISCUOUS_MODE__
 
 auto interfaceAttr = interface_attr::InterfaceInfo();
 
@@ -28,13 +29,21 @@ void SigTermHandler(int sig) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 2) {
-        std::cerr << "No passing input args: <interface name>" << std::endl;
+    if (argc != 3) {
+        std::cerr << "No passing input args: <interface name> <outputFile>" << std::endl;
         return EXIT_FAILURE;
     }
 
+    std::ofstream output(argv[2], std::ios::out);
+    if (!output.is_open()) {
+        std::cerr << "Can`t open output with name: " << argv[2]
+                << " file for write" << std::endl;
+        return EXIT_FAILURE;
+    }
+
+    std::ostream &ostream = output;
     /**
-    * Определим новый обработчик сигнала SIGINT - функцию mode_off
+    * Определим новый обработчик сигнала SIGTERM - функцию SigTermHandler
     */
     (void)signal(SIGTERM, SigTermHandler);
 
@@ -62,7 +71,7 @@ int main(int argc, char **argv) {
     std::cout << "Enable promiscuous mode for interface with name: " << interfaceName << std::endl;
     interfaceAttr.enablePromiscuousMode();
 #endif
-    std::cout << interfaceAttr << std::endl;
+    output << interfaceAttr << std::endl;
 
     /**
      * При работе с пакетными сокетами для хранения адресной информации
@@ -98,10 +107,10 @@ int main(int argc, char **argv) {
             std::cerr << "sys call recvfrom is failed" << std::endl;
         }
 
-        std::cout << "Receive raw package with size: " << receiveBuffSize << std::endl;
-        parser::ParsePackage(std::cout, buffer.data(), receiveBuffSize);
-        std::cout << std::endl;
+        ostream << "Receive raw package with size: " << receiveBuffSize << std::endl;
+        parser::ParsePackageAndPayload(ostream, buffer.data());
+        ostream << std::endl;
+        memset(buffer.data(), 0, buffer.size());
     }
-
     return 0;
 }

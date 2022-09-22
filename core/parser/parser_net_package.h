@@ -17,7 +17,9 @@ typedef struct iphdr IpHeader;
 typedef struct udphdr UdpHeader;
 typedef struct tcphdr TcpHeader;
 
-void ParsePackage(std::ostream &ostream, const __u8 *buff, uint buffSize);
+void ParsePackageAndPayload(std::ostream &ostream, const __u8 *buff, const uint buffSize);
+
+void ParsePackage(std::ostream &ostream, const __u8 *buff);
 
 EthernetHeader ExtractEthernetHeader(const __u8 *buff);
 

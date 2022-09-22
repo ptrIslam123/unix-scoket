@@ -172,17 +172,18 @@ std::ostream &InterfaceInfo::operator<<(std::ostream &os) const {
     os << "]\t";
     os << "MTU: " << getMtu() << "\t";
 
+    os << "IFF_PROMISC: ";
     struct ifreq ifReq = GetIfReq(data_.name_);
     if(ioctl(data_.sock_, SIOCGIFFLAGS, &ifReq) < 0) {
-        throw std::runtime_error("Can`t get flags info for interface with name: " +
-                    std::string(getName()));
+       os << "Undefined";
+       return os;
     }
 
     const auto flags = ifReq.ifr_ifru.ifru_flags;
     if (flags & IFF_PROMISC) {
-        os << "IFF_PROMISC UP";
+        os << "UP";
     } else {
-        os << "IFF_PROMISC DOWN";
+        os << "DOWN";
     }
     return os << std::endl;
 }

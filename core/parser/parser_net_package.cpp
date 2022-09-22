@@ -7,9 +7,30 @@
 
 //#define __NOTES__
 
+namespace {
+
+void WriteDataTo(std::ostream &ostream, const __u8 *const buff, uint size) {
+    ostream << "************************ PAYLOAD ************************" << "\n";
+    for (auto i = 0; i < size; ++i) {
+        if (i % 40 == 0 && i != 0) {
+            ostream << "\n";
+        }
+        ostream << std::hex << std::setw(2) << (int)buff[i];
+    }
+    ostream << std::dec << "\n";
+}
+
+} // namespace
+
 namespace parser {
 
-void ParsePackage(std::ostream &ostream, const __u8 *buff, const uint buffSize) {
+void ParsePackageAndPayload(std::ostream &ostream, const __u8 *buff, const uint buffSize) {
+    ParsePackage(ostream, buff);
+    const auto [data, size] = parser::ExtractData(buff, buffSize);
+    WriteDataTo(ostream, data, size);
+}
+
+void ParsePackage(std::ostream &ostream, const __u8 *buff) {
     WriteEthernetHeaderTo(ostream, ExtractEthernetHeader(buff));
     const auto ipHeader = ExtractIpHeader(buff);
     WriteIpHeaderTo(ostream, ipHeader);
@@ -23,17 +44,8 @@ void ParsePackage(std::ostream &ostream, const __u8 *buff, const uint buffSize) 
         ostream << "************************ Undefined protocol type ************************"
                 << std::endl;
     }
-    const auto [data, size] = parser::ExtractData(buff, buffSize);
-    ostream << "************************ PAYLOAD ************************" << "\n";
-    for (auto i = 0; i < size; ++i) {
-        if (i % 15 == 0 && i != 0) {
-            ostream << "\n";
-        }
-        ostream << std::hex << (int)data[i];
-    }
-    ostream << std::dec << "\n";
-    ostream << "************************ PARSE END ************************" << std::endl;
 }
+
 
 std::pair<__u8*, uint> ExtractData(const __u8 *const buff, const uint size) {
     constexpr auto ethernetHeaderLen = ETH_HLEN;
