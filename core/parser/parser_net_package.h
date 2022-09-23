@@ -3,19 +3,10 @@
 
 #include <iostream>
 #include <linux/types.h>
-#include <linux/if_ether.h>
-#include <linux/if_ether.h>
-#include <linux/if.h>
-#include <netinet/ip.h>
-#include <netinet/udp.h>
-#include <netinet/tcp.h>
+
+#include "types/package_header_types.h"
 
 namespace parser {
-
-typedef struct ethhdr EthernetHeader;
-typedef struct iphdr IpHeader;
-typedef struct udphdr UdpHeader;
-typedef struct tcphdr TcpHeader;
 
 void ParsePackageAndPayload(std::ostream &ostream, const __u8 *buff, const uint buffSize);
 

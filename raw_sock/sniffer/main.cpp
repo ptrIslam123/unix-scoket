@@ -108,7 +108,7 @@ int main(int argc, char **argv) {
         }
 
         ostream << "Receive raw package with size: " << receiveBuffSize << std::endl;
-        parser::ParsePackageAndPayload(ostream, buffer.data());
+        parser::ParsePackageAndPayload(ostream, buffer.data(), receiveBuffSize);
         ostream << std::endl;
         memset(buffer.data(), 0, buffer.size());
     }

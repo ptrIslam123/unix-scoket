@@ -124,7 +124,7 @@ UdpHeader ExtractUdpHeader(const __u8 *const buff) {
     /// Так как sizeof может дать не верный результат из-за особеностей выравнивания структур
     constexpr auto ethernetHeaderLen = ETH_HLEN;
     constexpr auto wordSize = 4;
-    const auto ipHeaderLen = (unsigned int)(ExtractIpHeader(buff).ihl) * wordSize;
+    const auto ipHeaderLen = static_cast<uint>(ExtractIpHeader(buff).ihl) * wordSize;
     const UdpHeader *const udpHeader = (UdpHeader*)(buff + ethernetHeaderLen + ipHeaderLen);
     UdpHeader result;
 #ifdef __NOTES__
