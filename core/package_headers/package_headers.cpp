@@ -1,5 +1,6 @@
 #include "package_headers.h"
 
+#include <vector>
 #include <cstring>
 #include <cassert>
 
@@ -17,75 +18,61 @@ ushort Checksum(ushort *buff, int _16BitWord)
     return (ushort)(~sum);
 }
 
+unsigned short csum(unsigned short *ptr,int nbytes)
+{
+    register long sum;
+    unsigned short oddbyte;
+    register short answer;
+
+    sum=0;
+    while(nbytes>1) {
+        sum+=*ptr++;
+        nbytes-=2;
+    }
+    if(nbytes==1) {
+        oddbyte=0;
+        *((u_char*)&oddbyte)=*(u_char*)ptr;
+        sum+=oddbyte;
+    }
+
+    sum = (sum>>16)+(sum & 0xffff);
+    sum = sum + (sum>>16);
+    answer=(short)~sum;
+
+    return(answer);
+}
+
 } // namespace
 
 namespace package {
 
-size_t ConstructDgram(__u8 *const  buff, const size_t buffSize, const char *const data,
-                    const size_t dataSize, const ushort idSequence) {
-    auto totalSize = 0U;
-    /// Construct ethernet header
-    EthernetHeader *ethernetHeader = nullptr;
-    {
-        const auto destinationMacAddr = "";
-        const auto sourceMacAddr = "";
-        ethernetHeader = ConstructEthernetHeader(buff, destinationMacAddr, sourceMacAddr);
-        totalSize += sizeof(EthernetHeader);
-    }
-    /// Construct ipv4 header
-    IpHeader *ipHeader = nullptr;
-    {
-        const auto ttl = 225;
-        const auto protocol = IPPROTO_UDP;
-        const auto destinationIpAddr = 0U;
-        const auto sourceIpAddr = 0U;
-        totalSize += sizeof(IpHeader);
-        assert(totalSize <= buffSize);
-        ipHeader = ConstructIpv4Header(buff, idSequence, ttl, protocol,
-                                       destinationIpAddr, sourceIpAddr);
-    }
-    /// Construct udp header
-    UdpHeader *udpHeader = nullptr;
-    {
-        const auto destinationPort = 0U;
-        const auto sourcePort = 0U;
-        totalSize += sizeof(UdpHeader);
-        assert(totalSize <= buffSize);
-        udpHeader = ConstructUdpHeader(buff, destinationPort, sourcePort, dataSize);
-    }
-    /// Copy payload to the buffer
-    assert(totalSize + dataSize <= buffSize);
-    memcpy(buff + totalSize, data, dataSize);
-    totalSize += dataSize;
-    /// Filling the remaining fields of the IP and UDP headers:
-    /// Set UDP length
-    udpHeader->len = htons(totalSize - sizeof(IpHeader) - sizeof(EthernetHeader));
-    /// Set IP length
-    ipHeader->tot_len = htons(totalSize - sizeof(EthernetHeader));
-    /// Set checksum
-    ipHeader->check = Checksum((ushort*)(buff + sizeof(EthernetHeader)), sizeof(IpHeader) / 2);
-    return totalSize;
-}
+UdpHeader *ConstructUdpHeader(__u8 *const buff, const ushort destinationPort, const ushort sourcePort,
+                              const ushort payloadSize, const PseudoHeader &pseudoHeader) {
+    UdpHeader *const udpHeader = (UdpHeader*)(buff);
 
-UdpHeader *ConstructUdpHeader(__u8 *const buff, const ushort destinationPort,
-                              const ushort sourcePort, const ushort payloadSize) {
-    const auto ipHeaderLength = sizeof(IpHeader);
-    UdpHeader *const udpHeader = (UdpHeader*)(buff + ETH_HLEN + ipHeaderLength);
     /// Copy destination port number
     udpHeader->dest = htons(destinationPort);
     /// Copy source port number
     udpHeader->source = htons(sourcePort);
     /// Copy UDP header length (8 bytes) = [dest/source ports, checksum, udp length]
     constexpr auto udpHeaderLen = 8;
-    udpHeader->len = udpHeaderLen + payloadSize;
+    udpHeader->len = htons(udpHeaderLen + payloadSize);
+
+    int psize = sizeof(PseudoHeader) + sizeof(UdpHeader) + payloadSize;
+    std::vector<char> pseudogram(psize);
+
+    memcpy(pseudogram.data(), (char*)&pseudoHeader, sizeof(PseudoHeader));
+    memcpy(pseudogram.data() + sizeof(PseudoHeader), udpHeader, sizeof(struct udphdr) +
+                                                                        payloadSize);
+    udpHeader->check = csum((unsigned short*)pseudogram.data(), psize);
     return udpHeader;
 }
 
 
 IpHeader *ConstructIpv4Header(__u8 *const buff, const ushort id, const u_char timeToLevel,
                            const u_char protocol, const uint destinationIpAddr,
-                           const uint sourceIpAddr) {
-    IpHeader *const ipHeader = (IpHeader*)(buff + ETH_HLEN);
+                           const uint sourceIpAddr, const size_t payloadSize) {
+    IpHeader *const ipHeader = (IpHeader*)(buff);
     {
         /// real length in bytes is word(4) * (wordCount)5 = 20 bytes
         const auto wordCount = 5;
@@ -99,19 +86,20 @@ IpHeader *ConstructIpv4Header(__u8 *const buff, const ushort id, const u_char ti
         const auto typeOfService = 16;
         ipHeader->tos = typeOfService;
     }
-    ipHeader->tot_len = 0;
+    ipHeader->tot_len = sizeof(IpHeader) + sizeof(UdpHeader) + payloadSize;
     ipHeader->id = htons(id);
     ipHeader->frag_off = 0;
     ipHeader->ttl = timeToLevel;
     ipHeader->protocol = protocol;
-    ipHeader->check = 0;
+    ipHeader->check = csum((unsigned short *)buff, ipHeader->tot_len);
     ipHeader->daddr = destinationIpAddr;
     ipHeader->saddr = sourceIpAddr;
     return ipHeader;
 }
 
-EthernetHeader *ConstructEthernetHeader(__u8 *const buff, const std::string_view destinationMacAddr,
-                             const std::string_view sourceMacAddr) {
+EthernetHeader *ConstructEthernetHeader(__u8 *const buff,
+                                        const std::string_view destinationMacAddr,
+                                        const std::string_view sourceMacAddr) {
     const auto macAddressLen = ETH_ALEN;
     EthernetHeader *const ethernetHeader = (EthernetHeader*)(buff);
     /// Copy destination MAC address
